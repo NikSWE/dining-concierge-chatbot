@@ -6,6 +6,7 @@
       "es2020",
       "dom"
     ],
+    "rootDirs": ["./bin", "./lib"],
     "declaration": true,
     "strict": true,
     "noImplicitAny": true,
@@ -26,6 +27,6 @@
   },
   "exclude": [
     "node_modules",
-    "cdk.out"
+    "cdk.out",
   ]
 }

@@ -8,3 +8,6 @@ node_modules
 cdk.out
 
 .idea/
+
+assets/LF0/node_modules
+assets/LF1/node_modules

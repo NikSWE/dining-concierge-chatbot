@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "strict": true,
+    "preserveConstEnums": true,
+    "noEmit": true,
+    "sourceMap": true,
+    "module":"commonjs",
+    "moduleResolution":"node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "outDir":".",
+    "rootDir": ".",
+    "declaration": true,
+  },
+  "include": [
+    "CallLexLambda.ts",
+    "OptionsLambda.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "lf0",
+  "version": "0.1.0",
+  "bin": {
+    "lf0": "callLexLambda.cjs"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.122",
+    "aws-lambda": "^1.0.7",
+    "aws-sdk": "^2.1468.0"
+  }
+}
