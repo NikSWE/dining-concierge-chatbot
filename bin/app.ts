@@ -5,6 +5,8 @@ import { LambdaStack } from '../lib/lamba';
 import { IdentityStack } from '../lib/identity';
 import { env } from '../lib/config';
 import {Construct} from "constructs";
+import {SqsStack} from "../lib/sqs";
+import {DynamoDBStack} from "../lib/dynamodb";
 
 class DiningConciergeChatbotStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
@@ -30,10 +32,19 @@ class DiningConciergeChatbotStack extends Stack {
         apiGateway.addDependency(identity);
         apiGateway.addDependency(lambda);
 
-        const s3 = new S3Stack(this, "DiningConciergeS3Stack", {
+        const s3 = new S3Stack(this, 'DiningConciergeS3Stack', {
             env: env
         });
         s3.addDependency(apiGateway);
+
+        const sqs = new SqsStack(this, 'DiningConciergeSqsStack', {
+            env: env
+        });
+
+        const dynamodb = new DynamoDBStack(this, 'DiningConciergeDynamoDBStack', {
+            env: env
+        });
+        dynamodb.addDependency(lambda);
     }
 }
 
