@@ -46,6 +46,8 @@ function getElicitSlotResponse(
                 Cuisine: currentSlots.Cuisine ? currentSlots.Cuisine : null,
                 PhoneNumber: currentSlots.PhoneNumber ? currentSlots.PhoneNumber : null,
                 EmailAddress: currentSlots.EmailAddress ? currentSlots.EmailAddress : null,
+                Locality: currentSlots.Locality ? currentSlots.Locality : null,
+                BookingDate: currentSlots.BookingDate ? currentSlots.BookingDate : null,
                 BookingTime: currentSlots.BookingTime ? currentSlots.BookingTime : null,
                 NumberOfPeople: currentSlots.NumberOfPeople ? currentSlots.NumberOfPeople : null
             }
@@ -53,13 +55,21 @@ function getElicitSlotResponse(
     }
 }
 
+function getFormattedDate(date: Date) {
+    return [
+        date.getFullYear(),
+        (date.getMonth() + 1).toString().padStart(2, '0'),
+        date.getDate().toString().padStart(2, '0')
+    ].join('-');
+}
+
 function isValidEmailAddress(emailAddress: string): boolean {
     let emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(emailAddress);
 }
 
-function isValidBookingTime(bookingTime: string): boolean {
-    return true;
+function isValidBookingTime(bookingDate: string, bookingTime: string): boolean {
+    return new Date() <= new Date([bookingDate, bookingTime].join(' '));
 }
 
 abstract class CustomHandler {
@@ -84,6 +94,29 @@ abstract class CustomHandler {
         }
 
         return getCloseResponse('We have received your request! We will get in touch shortly!');
+    }
+}
+
+class EllicitLocalityHandler extends CustomHandler {
+    handleRequest(event: LexEvent): LexResult | null {
+        let response: LexResult | null = null;
+
+        if (!event.currentIntent.slots.Locality) {
+            response = getElicitSlotResponse(
+                'Locality',
+                'What borough would you like to dine in?',
+                event.currentIntent.slots
+            );
+        } else if (event.currentIntent.slots.Locality &&
+            !localitiesServiced.has(event.currentIntent.slots.Locality.toLowerCase())) {
+            response = getElicitSlotResponse(
+                'Locality',
+                'Sorry, we only service the five boroughs of New York City. Please provide a valid burough.',
+                event.currentIntent.slots
+            );
+        }
+
+        return response;
     }
 }
 
@@ -163,14 +196,37 @@ class EllicitBookingTimeHandler extends CustomHandler {
         if (!event.currentIntent.slots.BookingTime) {
             response = getElicitSlotResponse(
                 'BookingTime',
-                'When would you like to make a reservation?',
+                'What time would you like to make a reservation?',
                 event.currentIntent.slots
             );
-        } else if (event.currentIntent.slots.BookingTime &&
-            !isValidBookingTime(event.currentIntent.slots.BookingTime)) {
+        } else if (event.currentIntent.slots.BookingTime && event.currentIntent.slots.BookingDate &&
+            !isValidBookingTime(event.currentIntent.slots.BookingDate, event.currentIntent.slots.BookingTime)) {
             response = getElicitSlotResponse(
                 'BookingTime',
-                'I am sorry, could you please provide a valid booking time?',
+                'I am sorry, we can only make reservations in the future. Could you please provide a valid booking time?',
+                event.currentIntent.slots
+            );
+        }
+
+        return response;
+    }
+}
+
+class EllicitBookingDateHandler extends CustomHandler {
+    handleRequest(event: LexEvent): LexResult | null {
+        let response: LexResult | null = null;
+
+        if (!event.currentIntent.slots.BookingDate) {
+            response = getElicitSlotResponse(
+                'BookingDate',
+                'What date would you like to make a reservation for?',
+                event.currentIntent.slots
+            );
+        } else if (event.currentIntent.slots.BookingDate &&
+            new Date(event.currentIntent.slots.BookingDate) < new Date(getFormattedDate(new Date()))) {
+            response = getElicitSlotResponse(
+                'BookingDate',
+                'Sorry, we can only make reservations for the future. Please provide a valid date.',
                 event.currentIntent.slots
             );
         }
@@ -190,8 +246,8 @@ class EllicitNumberOfPeopleHandler extends CustomHandler {
                 event.currentIntent.slots
             );
         } else if (event.currentIntent.slots.NumberOfPeople &&
-            +event.currentIntent.slots.NumberOfPeople <= 0 &&
-            +event.currentIntent.slots.NumberOfPeople > 100) {
+            (+event.currentIntent.slots.NumberOfPeople <= 0 ||
+            +event.currentIntent.slots.NumberOfPeople > 100)) {
             response = getElicitSlotResponse(
                 'NumberOfPeople',
                 'I am sorry, could you please provide a valid size for the dining party?',
@@ -227,14 +283,18 @@ const diningSuggestionIntentHandler = new DiningSuggestionsIntentHandler();
 
 const ellicitPhoneNumberHandler = new EllicitPhoneNumberHandler();
 const ellicitEmailAddressHandler = new EllicitEmailAddressHandler();
+const ellicitLocalityHandler = new EllicitLocalityHandler();
 const ellicitCuisineHandler = new EllicitCuisineHandler();
 const ellicitBookingTimeHandler = new EllicitBookingTimeHandler();
+const ellicitBookingDateHandler = new EllicitBookingDateHandler();
 const ellicitNumberOfPeopleHandler = new EllicitNumberOfPeopleHandler();
 
 diningSuggestionIntentHandler.setNext(ellicitPhoneNumberHandler);
 ellicitPhoneNumberHandler.setNext(ellicitEmailAddressHandler);
-ellicitEmailAddressHandler.setNext(ellicitCuisineHandler);
-ellicitCuisineHandler.setNext(ellicitBookingTimeHandler);
+ellicitEmailAddressHandler.setNext(ellicitLocalityHandler);
+ellicitLocalityHandler.setNext(ellicitCuisineHandler);
+ellicitCuisineHandler.setNext(ellicitBookingDateHandler);
+ellicitBookingDateHandler.setNext(ellicitBookingTimeHandler);
 ellicitBookingTimeHandler.setNext(ellicitNumberOfPeopleHandler);
 
 export const handler: Handler = async function(event: LexEvent): Promise<LexResult> {

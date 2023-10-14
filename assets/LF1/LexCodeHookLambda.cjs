@@ -90,18 +90,27 @@ function getElicitSlotResponse(slotToEllicitName, messageContent, currentSlots) 
                 Cuisine: currentSlots.Cuisine ? currentSlots.Cuisine : null,
                 PhoneNumber: currentSlots.PhoneNumber ? currentSlots.PhoneNumber : null,
                 EmailAddress: currentSlots.EmailAddress ? currentSlots.EmailAddress : null,
+                Locality: currentSlots.Locality ? currentSlots.Locality : null,
+                BookingDate: currentSlots.BookingDate ? currentSlots.BookingDate : null,
                 BookingTime: currentSlots.BookingTime ? currentSlots.BookingTime : null,
                 NumberOfPeople: currentSlots.NumberOfPeople ? currentSlots.NumberOfPeople : null
             }
         }
     };
 }
+function getFormattedDate(date) {
+    return [
+        date.getFullYear(),
+        (date.getMonth() + 1).toString().padStart(2, '0'),
+        date.getDate().toString().padStart(2, '0')
+    ].join('-');
+}
 function isValidEmailAddress(emailAddress) {
     var emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     return emailRegex.test(emailAddress);
 }
-function isValidBookingTime(bookingTime) {
-    return true;
+function isValidBookingTime(bookingDate, bookingTime) {
+    return new Date() <= new Date([bookingDate, bookingTime].join(' '));
 }
 var CustomHandler = /** @class */ (function () {
     function CustomHandler() {
@@ -125,6 +134,24 @@ var CustomHandler = /** @class */ (function () {
     };
     return CustomHandler;
 }());
+var EllicitLocalityHandler = /** @class */ (function (_super) {
+    __extends(EllicitLocalityHandler, _super);
+    function EllicitLocalityHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    EllicitLocalityHandler.prototype.handleRequest = function (event) {
+        var response = null;
+        if (!event.currentIntent.slots.Locality) {
+            response = getElicitSlotResponse('Locality', 'What borough would you like to dine in?', event.currentIntent.slots);
+        }
+        else if (event.currentIntent.slots.Locality &&
+            !localitiesServiced.has(event.currentIntent.slots.Locality.toLowerCase())) {
+            response = getElicitSlotResponse('Locality', 'Sorry, we only service the five boroughs of New York City. Please provide a valid burough.', event.currentIntent.slots);
+        }
+        return response;
+    };
+    return EllicitLocalityHandler;
+}(CustomHandler));
 var EllicitPhoneNumberHandler = /** @class */ (function (_super) {
     __extends(EllicitPhoneNumberHandler, _super);
     function EllicitPhoneNumberHandler() {
@@ -187,15 +214,33 @@ var EllicitBookingTimeHandler = /** @class */ (function (_super) {
     EllicitBookingTimeHandler.prototype.handleRequest = function (event) {
         var response = null;
         if (!event.currentIntent.slots.BookingTime) {
-            response = getElicitSlotResponse('BookingTime', 'When would you like to make a reservation?', event.currentIntent.slots);
+            response = getElicitSlotResponse('BookingTime', 'What time would you like to make a reservation?', event.currentIntent.slots);
         }
-        else if (event.currentIntent.slots.BookingTime &&
-            !isValidBookingTime(event.currentIntent.slots.BookingTime)) {
-            response = getElicitSlotResponse('BookingTime', 'I am sorry, could you please provide a valid booking time?', event.currentIntent.slots);
+        else if (event.currentIntent.slots.BookingTime && event.currentIntent.slots.BookingDate &&
+            !isValidBookingTime(event.currentIntent.slots.BookingDate, event.currentIntent.slots.BookingTime)) {
+            response = getElicitSlotResponse('BookingTime', 'I am sorry, we can only make reservations in the future. Could you please provide a valid booking time?', event.currentIntent.slots);
         }
         return response;
     };
     return EllicitBookingTimeHandler;
+}(CustomHandler));
+var EllicitBookingDateHandler = /** @class */ (function (_super) {
+    __extends(EllicitBookingDateHandler, _super);
+    function EllicitBookingDateHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    EllicitBookingDateHandler.prototype.handleRequest = function (event) {
+        var response = null;
+        if (!event.currentIntent.slots.BookingDate) {
+            response = getElicitSlotResponse('BookingDate', 'What date would you like to make a reservation for?', event.currentIntent.slots);
+        }
+        else if (event.currentIntent.slots.BookingDate &&
+            new Date(event.currentIntent.slots.BookingDate) < new Date(getFormattedDate(new Date()))) {
+            response = getElicitSlotResponse('BookingDate', 'Sorry, we can only make reservations for the future. Please provide a valid date.', event.currentIntent.slots);
+        }
+        return response;
+    };
+    return EllicitBookingDateHandler;
 }(CustomHandler));
 var EllicitNumberOfPeopleHandler = /** @class */ (function (_super) {
     __extends(EllicitNumberOfPeopleHandler, _super);
@@ -208,8 +253,8 @@ var EllicitNumberOfPeopleHandler = /** @class */ (function (_super) {
             response = getElicitSlotResponse('NumberOfPeople', 'How many people will be dining?', event.currentIntent.slots);
         }
         else if (event.currentIntent.slots.NumberOfPeople &&
-            +event.currentIntent.slots.NumberOfPeople <= 0 &&
-            +event.currentIntent.slots.NumberOfPeople > 100) {
+            (+event.currentIntent.slots.NumberOfPeople <= 0 ||
+                +event.currentIntent.slots.NumberOfPeople > 100)) {
             response = getElicitSlotResponse('NumberOfPeople', 'I am sorry, could you please provide a valid size for the dining party?', event.currentIntent.slots);
         }
         return response;
@@ -251,13 +296,17 @@ var thankYouIntentHandler = new ThankYouIntentHandler();
 var diningSuggestionIntentHandler = new DiningSuggestionsIntentHandler();
 var ellicitPhoneNumberHandler = new EllicitPhoneNumberHandler();
 var ellicitEmailAddressHandler = new EllicitEmailAddressHandler();
+var ellicitLocalityHandler = new EllicitLocalityHandler();
 var ellicitCuisineHandler = new EllicitCuisineHandler();
 var ellicitBookingTimeHandler = new EllicitBookingTimeHandler();
+var ellicitBookingDateHandler = new EllicitBookingDateHandler();
 var ellicitNumberOfPeopleHandler = new EllicitNumberOfPeopleHandler();
 diningSuggestionIntentHandler.setNext(ellicitPhoneNumberHandler);
 ellicitPhoneNumberHandler.setNext(ellicitEmailAddressHandler);
-ellicitEmailAddressHandler.setNext(ellicitCuisineHandler);
-ellicitCuisineHandler.setNext(ellicitBookingTimeHandler);
+ellicitEmailAddressHandler.setNext(ellicitLocalityHandler);
+ellicitLocalityHandler.setNext(ellicitCuisineHandler);
+ellicitCuisineHandler.setNext(ellicitBookingDateHandler);
+ellicitBookingDateHandler.setNext(ellicitBookingTimeHandler);
 ellicitBookingTimeHandler.setNext(ellicitNumberOfPeopleHandler);
 var handler = function (event) {
     return __awaiter(this, void 0, void 0, function () {
