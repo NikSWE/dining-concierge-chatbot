@@ -50,7 +50,7 @@ var handler = function (event) {
                     return [4 /*yield*/, lexClient.postText({
                             botAlias: 'DiningReservationAlias',
                             botName: 'DiningReservation',
-                            userId: processedRequest.messages[0].unstructured.id,
+                            userId: "test",
                             inputText: processedRequest.messages[0].unstructured.text
                         }).promise()];
                 case 1:
@@ -60,8 +60,9 @@ var handler = function (event) {
                                 statusCode: 200,
                                 headers: {
                                     'Access-Control-Allow-Origin': '*',
-                                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                                    'Access-Control-Allow-Methods': 'POST',
+                                    'Access-Control-Allow-Credentials': 'true',
+                                    'Access-Control-Allow-Methods': 'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD',
+                                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'
                                 },
                                 body: JSON.stringify({
                                     messages: [{
@@ -76,9 +77,15 @@ var handler = function (event) {
                     _a.label = 2;
                 case 2: return [2 /*return*/, {
                         statusCode: 500,
+                        headers: {
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Credentials': 'true',
+                            'Access-Control-Allow-Methods': 'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD',
+                            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'
+                        },
                         body: JSON.stringify({
                             message: "No request received",
-                        }),
+                        })
                     }];
             }
         });

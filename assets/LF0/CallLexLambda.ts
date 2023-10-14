@@ -10,7 +10,7 @@ export const handler: Handler = async function (event: APIGatewayProxyEvent): Pr
         const response = await lexClient.postText({
             botAlias: 'DiningReservationAlias',
             botName: 'DiningReservation',
-            userId: processedRequest.messages[0].unstructured.id,
+            userId: "user",
             inputText: processedRequest.messages[0].unstructured.text
         }).promise();
 
@@ -19,8 +19,9 @@ export const handler: Handler = async function (event: APIGatewayProxyEvent): Pr
                 statusCode: 200,
                 headers: {
                     'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                    'Access-Control-Allow-Methods': 'POST',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Allow-Methods': 'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD',
+                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'
                 },
                 body: JSON.stringify({
                     messages: [{
@@ -36,8 +37,14 @@ export const handler: Handler = async function (event: APIGatewayProxyEvent): Pr
 
     return {
         statusCode: 500,
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Allow-Methods': 'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD',
+            'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'
+        },
         body: JSON.stringify({
             message: "No request received",
-        }),
+        })
     };
 }
