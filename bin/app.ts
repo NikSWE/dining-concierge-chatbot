@@ -1,7 +1,7 @@
 import {App, Stack, StackProps} from 'aws-cdk-lib';
 import { S3Stack } from '../lib/s3';
 import { ApiGatewayStack } from '../lib/api-gateway';
-import { LambdaStack } from '../lib/lamba';
+import { LambdaStack } from '../lib/lambda';
 import { IdentityStack } from '../lib/identity';
 import { env } from '../lib/config';
 import {Construct} from "constructs";
