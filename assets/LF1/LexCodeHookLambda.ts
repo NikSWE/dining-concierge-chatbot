@@ -1,6 +1,6 @@
 import {Handler, LexEvent, LexEventSlots, LexResult} from "aws-lambda";
-import {LexDialogActionClose} from "aws-lambda/trigger/lex";
-import moment from "moment";
+import {SQS} from "aws-sdk";
+import {SendMessageRequest} from "aws-sdk/clients/sqs";
 
 const localitiesServiced: Set<string> = new Set<string>([
     'manhattan',
@@ -56,12 +56,16 @@ function getElicitSlotResponse(
     }
 }
 
-function getFormattedDate(date: Date) {
-    return [
-        date.getFullYear(),
+function getStartOfDay(dateTime: string) {
+    const date = new Date(dateTime);
+
+    const day = [
         (date.getMonth() + 1).toString().padStart(2, '0'),
-        date.getDate().toString().padStart(2, '0')
-    ].join('-');
+        date.getDate().toString().padStart(2, '0'),
+        date.getFullYear()
+    ].join('/');
+
+    return `${day} 00:00`;
 }
 
 function isValidEmailAddress(emailAddress: string): boolean {
@@ -70,7 +74,56 @@ function isValidEmailAddress(emailAddress: string): boolean {
 }
 
 function isValidBookingTime(bookingDate: string, bookingTime: string): boolean {
-    return new Date() <= new Date([bookingDate, bookingTime].join(' '));
+    const currentDate = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const reservationDate = new Date([bookingDate, bookingTime].join(' '));
+    return currentDate <= reservationDate;
+}
+
+function isValidBookingDate(bookingDate: string): boolean {
+    const reservationDate = new Date(bookingDate);
+    const currentDate = new Date(getStartOfDay(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })));
+    return currentDate <= reservationDate;
+}
+
+async function enqueueSqs(event: LexEvent) {
+    const sqsClient = new SQS();
+    const params: SendMessageRequest = {
+        MessageBody: 'Suggestion Request',
+        QueueUrl: 'https://sqs.us-east-1.amazonaws.com/132900788542/SuggestionRequestQueue',
+        MessageAttributes: {
+            'PhoneNumber': {
+                StringValue: event.currentIntent.slots.PhoneNumber ? event.currentIntent.slots.PhoneNumber : '',
+                DataType: 'String'
+            },
+            'EmailAddress': {
+                StringValue: event.currentIntent.slots.EmailAddress ? event.currentIntent.slots.EmailAddress : '',
+                DataType: 'String'
+            },
+            'Cuisine': {
+                StringValue: event.currentIntent.slots.Cuisine ? event.currentIntent.slots.Cuisine : '',
+                DataType: 'String'
+            },
+            'BookingTime': {
+                StringValue: event.currentIntent.slots.BookingTime ? event.currentIntent.slots.BookingTime : '',
+                DataType: 'String'
+            },
+            'BookingDate': {
+                StringValue: event.currentIntent.slots.BookingDate ? event.currentIntent.slots.BookingDate : '',
+                DataType: 'String'
+            },
+            'NumberOfPeople': {
+                StringValue: event.currentIntent.slots.NumberOfPeople ? event.currentIntent.slots.NumberOfPeople : '',
+                DataType: 'String'
+            }
+        }
+    }
+
+    try {
+        const response = await sqsClient.sendMessage(params).promise();
+        console.log('Response: ', response);
+    } catch (error) {
+        console.error('Error: ', error);
+    }
 }
 
 abstract class CustomHandler {
@@ -83,7 +136,7 @@ abstract class CustomHandler {
 
     abstract handleRequest(event: LexEvent): LexResult | null;
 
-    passRequest(event: LexEvent): LexResult {
+    async passRequest(event: LexEvent): Promise<LexResult> {
         const result = this.handleRequest(event);
 
         if (!result) {
@@ -94,6 +147,7 @@ abstract class CustomHandler {
             return result;
         }
 
+        await enqueueSqs(event);
         return getCloseResponse('We have received your request! We will get in touch shortly!');
     }
 }
@@ -224,7 +278,7 @@ class EllicitBookingDateHandler extends CustomHandler {
                 event.currentIntent.slots
             );
         } else if (event.currentIntent.slots.BookingDate &&
-                moment(event.currentIntent.slots.BookingDate).isSameOrAfter(moment())) {
+                !isValidBookingDate(event.currentIntent.slots.BookingDate)) {
             response = getElicitSlotResponse(
                 'BookingDate',
                 'Sorry, we can only make reservations for the future. Please provide a valid date.',
@@ -302,11 +356,11 @@ export const handler: Handler = async function(event: LexEvent): Promise<LexResu
     let response: LexResult = getCloseResponse('Sorry, I didn\'t quite catch that');
 
     if (event.currentIntent.name == 'GreetingIntent') {
-        response = greetingIntentHandler.passRequest(event);
+        response = await greetingIntentHandler.passRequest(event);
     } else if (event.currentIntent.name == 'ThankYouIntent') {
-        response = thankYouIntentHandler.passRequest(event);
+        response = await thankYouIntentHandler.passRequest(event);
     } else if (event.currentIntent.name == 'DiningSuggestionsIntent') {
-        response = diningSuggestionIntentHandler.passRequest(event);
+        response = await diningSuggestionIntentHandler.passRequest(event);
     }
 
     return response;
