@@ -16,7 +16,7 @@
     "declaration": true,
   },
   "include": [
-    "LexCodeHookLambda.ts"
+    "ServiceRequestLambda.ts"
   ],
   "exclude": [
     "node_modules"
