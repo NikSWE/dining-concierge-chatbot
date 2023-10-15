@@ -6,11 +6,12 @@ export const handler: Handler = async function (event: APIGatewayProxyEvent): Pr
 
     if (event.body) {
         const processedRequest = JSON.parse(event.body);
+        console.log(processedRequest);
 
         const response = await lexClient.postText({
             botAlias: 'DiningReservationAlias',
             botName: 'DiningReservation',
-            userId: "user",
+            userId: processedRequest.messages[0].unstructured.id,
             inputText: processedRequest.messages[0].unstructured.text
         }).promise();
 
