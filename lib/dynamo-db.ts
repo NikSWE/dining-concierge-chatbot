@@ -10,6 +10,7 @@ export class DynamoDBStack extends Stack {
         super(scope, id, props);
 
         const restaurantsTable = new Table(this, 'RestaurantsTable', {
+            tableName: 'Restaurants',
             partitionKey: {
                 name: 'cuisine',
                 type: AttributeType.STRING
@@ -19,7 +20,5 @@ export class DynamoDBStack extends Stack {
                 type: AttributeType.STRING
             }
         });
-
-        // TODO: grant read priviledges to LF2
     }
 }

@@ -1,5 +1,6 @@
 import {Handler, LexEvent, LexEventSlots, LexResult} from "aws-lambda";
 import {LexDialogActionClose} from "aws-lambda/trigger/lex";
+import moment from "moment";
 
 const localitiesServiced: Set<string> = new Set<string>([
     'manhattan',
@@ -223,7 +224,7 @@ class EllicitBookingDateHandler extends CustomHandler {
                 event.currentIntent.slots
             );
         } else if (event.currentIntent.slots.BookingDate &&
-            new Date(event.currentIntent.slots.BookingDate) < new Date(getFormattedDate(new Date()))) {
+                moment(event.currentIntent.slots.BookingDate).isSameOrAfter(moment())) {
             response = getElicitSlotResponse(
                 'BookingDate',
                 'Sorry, we can only make reservations for the future. Please provide a valid date.',

@@ -6,7 +6,8 @@ import { IdentityStack } from '../lib/identity';
 import { env } from '../lib/config';
 import {Construct} from "constructs";
 import {SqsStack} from "../lib/sqs";
-import {DynamoDBStack} from "../lib/dynamodb";
+import {DynamoDBStack} from "../lib/dynamo-db";
+import {OpenSearchServiceStack} from "../lib/opensearch-service";
 
 class DiningConciergeChatbotStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
@@ -19,11 +20,19 @@ class DiningConciergeChatbotStack extends Stack {
             env: env
         });
 
+        const sqs = new SqsStack(this, 'DiningConciergeSqsStack', {
+            env: env,
+        });
+
         const lambda = new LambdaStack(this, 'DiningConciergeLambdaStack', {
             env: env,
-            callLexLambdaRole: identity.lexAccessRoleForLambda
+            callLexLambdaRole: identity.callLexLambdaRole,
+            lexCodeHookLambdaRole: identity.lexCodeHookLamdaRole,
+            serviceRequestLambdaRole: identity.serviceRequestLambdaRole,
+            sqsQueue: sqs.queue
         });
         lambda.addDependency(identity);
+        lambda.addDependency(sqs);
         
         const apiGateway = new ApiGatewayStack(this, 'DiningConciergeApiGatewayStack', {
             env: env,
@@ -37,14 +46,13 @@ class DiningConciergeChatbotStack extends Stack {
         });
         s3.addDependency(apiGateway);
 
-        const sqs = new SqsStack(this, 'DiningConciergeSqsStack', {
-            env: env
-        });
-
         const dynamodb = new DynamoDBStack(this, 'DiningConciergeDynamoDBStack', {
             env: env
         });
-        dynamodb.addDependency(lambda);
+
+        const elasticsearch = new OpenSearchServiceStack(this, 'DiningConciergeOpenSearchServiceStack', {
+            env: env
+        });
     }
 }
 
