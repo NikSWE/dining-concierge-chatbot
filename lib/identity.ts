@@ -3,28 +3,41 @@ import {Construct} from "constructs";
 import {Effect, PolicyDocument, PolicyStatement, Role, ServicePrincipal} from "aws-cdk-lib/aws-iam";
 
 export class IdentityStack extends Stack {
-    readonly lexAccessRoleForLambda: Role;
-    readonly apiGatewayCloudWatchRole: Role;
+    readonly callLexLambdaRole: Role;
+    readonly lexCodeHookLamdaRole: Role;
+    readonly serviceRequestLambdaRole: Role;
 
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
-        this.lexAccessRoleForLambda = new Role(this, 'LexAccessRole', {
+        this.callLexLambdaRole = new Role(this, 'CallLexLambdaRole', {
             assumedBy: new ServicePrincipal('lambda.amazonaws.com'),
             inlinePolicies: {
-                LexAccessPolicyForLambda: this.getLexAccessPolicyForLambda()
+                LexAccessPolicy: this.getLexAccessPolicy(),
+                CloudWatchLogsAccessPolicy: this.getCloudWatchLogsAccessPolicy()
             }
         });
 
-        this.apiGatewayCloudWatchRole = new Role(this, 'APIGatewayCloudWatchPolicy', {
-            assumedBy: new ServicePrincipal('apigateway.amazonaws.com'),
+        this.lexCodeHookLamdaRole = new Role(this, 'LexCodeHookLambdaRole', {
+            assumedBy: new ServicePrincipal('lambda.amazonaws.com'),
             inlinePolicies: {
-                APIGatewayCloudWatchPolicy: this.getAPIGatewayCloudWatchPolicy()
+                SQSAccessPolicy: this.getSqsAccessPolicy(),
+                CloudWatchLogsAccessPolicy: this.getCloudWatchLogsAccessPolicy()
+            }
+        });
+
+        this.serviceRequestLambdaRole = new Role(this, 'ServiceRequestLambdaRole', {
+            assumedBy: new ServicePrincipal('lambda.amazonaws.com'),
+            inlinePolicies: {
+                SQSAccessPolicy: this.getSqsAccessPolicy(),
+                ElasticSearchServiceAccessPolicy: this.getElasticSearchServiceAccessPolicy(),
+                DynamoDbAccessPolicy: this.getDynamoDbAccessPolicy(),
+                CloudWatchLogsAccessPolicy: this.getCloudWatchLogsAccessPolicy()
             }
         });
     }
 
-    private getLexAccessPolicyForLambda(): PolicyDocument {
+    private getLexAccessPolicy(): PolicyDocument {
         return new PolicyDocument( {
             statements: [
                 new PolicyStatement({
@@ -44,28 +57,65 @@ export class IdentityStack extends Stack {
                     ],
                     effect: Effect.ALLOW,
                     resources: ['*']
-                }),
-                new PolicyStatement({
-                    actions: [
-                        'cloudwatch:CreateLogGroup',
-                        'cloudwatch:CreateLogStream',
-                        'cloudwatch:PutLogEvents'
-                    ],
-                    effect: Effect.ALLOW,
-                    resources: ['*']
                 })
             ]
         })
     }
 
-    private getAPIGatewayCloudWatchPolicy() {
+    private getCloudWatchLogsAccessPolicy(): PolicyDocument {
+        return new PolicyDocument({
+            statements: [
+                new PolicyStatement({
+                    actions: [
+                        'logs:CreateLogGroup',
+                        'logs:CreateLogStream',
+                        'logs:PutLogEvents'
+                    ],
+                    effect: Effect.ALLOW,
+                    resources: ['*']
+                })
+            ]
+        });
+    }
+
+    private getSqsAccessPolicy(): PolicyDocument {
         return new PolicyDocument( {
             statements: [
                 new PolicyStatement({
                     actions: [
-                        'cloudwatch:CreateLogGroup',
-                        'cloudwatch:CreateLogStream',
-                        'cloudwatch:PutLogEvents'
+                        'sqs:SendMessage',
+                        'sqs:DeleteMessage',
+                        'sqs:GetQueueAttributes',
+                        'sqs:GetQueueUrl'
+                    ],
+                    effect: Effect.ALLOW,
+                    resources: ['*']
+                })
+            ]
+        });
+    }
+
+    private getElasticSearchServiceAccessPolicy(): PolicyDocument {
+        return new PolicyDocument( {
+            statements: [
+                new PolicyStatement({
+                    actions: [
+                        'es:ESHttpGet',
+                    ],
+                    effect: Effect.ALLOW,
+                    resources: ['*']
+                })
+            ]
+        });
+    }
+
+    private getDynamoDbAccessPolicy(): PolicyDocument {
+        return new PolicyDocument( {
+            statements: [
+                new PolicyStatement({
+                    actions: [
+                        'dynamodb:GetItem',
+                        'dynamodb:Query'
                     ],
                     effect: Effect.ALLOW,
                     resources: ['*']
