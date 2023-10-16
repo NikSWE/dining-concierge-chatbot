@@ -1,20 +1,22 @@
 import {Handler, SQSEvent} from "aws-lambda";
-import {config, DynamoDB} from "aws-sdk";
+import {SQS, DynamoDB} from "aws-sdk";
 import {Client} from "@elastic/elasticsearch";
-import {DynamoGetItem} from "aws-cdk-lib/aws-stepfunctions-tasks";
+import {SendEmailCommand, SESClient} from "@aws-sdk/client-ses";
 
 const dynamoDbClient = new DynamoDB();
 const elasticSearchClient = new Client({
-    node: 'opensearchservice-doamin-endpoint'
+    node: 'https://search-restaurants-noe3v4hr6z2haev5f4tz4bsll4.us-east-1.es.amazonaws.com/',
 });
+const sqsClient = new SQS();
+const sesClient = new SESClient();
 
 async function getRestaurantId(cuisine: string) {
     const query = {
-        index: 'index-name',
+        index: 'kibana_1',
         body: {
             query: {
                 match: {
-                    Cuisine: cuisine
+                    Cuisine: 'chinese'
                 }
             }
         }
@@ -23,12 +25,14 @@ async function getRestaurantId(cuisine: string) {
     let restaurantId: string | null = null;
     try {
         const response = await elasticSearchClient.search(query);
-        console.log('Response: ', response);
+
+        // @ts-ignore
+        console.log('Response: ', response.hits.hits[0]._source.name);
 
         const hitRandomIndex = Math.floor(Math.random() * response.hits.hits.length);
 
         // @ts-ignore
-        restaurantId = response.hits.hits[hitRandomIndex]._source.RestaurantId! as string;
+        restaurantId = response.hits.hits[hitRandomIndex]._source.id! as string;
     } catch (error) {
         console.error('Error: ', error);
         throw error;
@@ -54,6 +58,46 @@ async function getRestaurantInformation(cuisine: string, id: string) {
     return response.Item;
 }
 
+async function popSqsQueue(receiptHandle: string) {
+    try {
+        const response = await sqsClient.deleteMessage({
+            QueueUrl: 'https://sqs.us-east-1.amazonaws.com/132900788542/SuggestionRequestQueue',
+            ReceiptHandle: receiptHandle
+        }).promise();
+    } catch (error) {
+        console.log('Error when deleting from queue: ', error);
+    }
+}
+
+async function sendReservationEmail() {
+    const sendEmailRequest = {
+        Source: 'some source',
+        Destination: {
+            ToAddresses: [
+                'email'
+            ]
+        },
+        Message: {
+            Subject: {
+                Data: `Your reservation for DATE at TIME`
+            },
+            Body: {
+                Text: {
+                    Data: 'Reservation Details'
+                }
+            }
+        }
+    };
+
+    const command = new SendEmailCommand(sendEmailRequest);
+
+    try {
+        const response = await sesClient.send(command);
+    } catch (error) {
+        console.error('Error: ', error);
+    }
+}
+
 export const handler: Handler = async function(event: SQSEvent): Promise<void> {
     for (const record of event.Records) {
         try {
@@ -65,6 +109,8 @@ export const handler: Handler = async function(event: SQSEvent): Promise<void> {
             );
 
             console.log(restaurantInformation);
+
+            await popSqsQueue(record.receiptHandle);
         } catch (error) {
             console.log('Retrying');
         }
