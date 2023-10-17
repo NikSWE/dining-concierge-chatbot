@@ -1,13 +1,13 @@
 import {Stack, StackProps} from "aws-cdk-lib";
 import {Construct} from "constructs";
-import {Effect, PolicyDocument, PolicyStatement, Role, ServicePrincipal} from "aws-cdk-lib/aws-iam";
+import {AccountPrincipal, Effect, PolicyDocument, PolicyStatement, Role, ServicePrincipal} from "aws-cdk-lib/aws-iam";
 
 export class IdentityStack extends Stack {
     readonly callLexLambdaRole: Role;
     readonly lexCodeHookLamdaRole: Role;
     readonly serviceRequestLambdaRole: Role;
 
-    constructor(scope: Construct, id: string, props?: StackProps) {
+    constructor(scope: Construct, id: string, props: StackProps) {
         super(scope, id, props);
 
         this.callLexLambdaRole = new Role(this, 'CallLexLambdaRole', {
@@ -22,7 +22,8 @@ export class IdentityStack extends Stack {
             assumedBy: new ServicePrincipal('lambda.amazonaws.com'),
             inlinePolicies: {
                 SQSAccessPolicy: this.getSqsAccessPolicy(),
-                CloudWatchLogsAccessPolicy: this.getCloudWatchLogsAccessPolicy()
+                CloudWatchLogsAccessPolicy: this.getCloudWatchLogsAccessPolicy(),
+                DynamoDbAccessPolicy: this.getDynamoDbAccessPolicy()
             }
         });
 
@@ -32,7 +33,8 @@ export class IdentityStack extends Stack {
                 SQSAccessPolicy: this.getSqsAccessPolicy(),
                 ElasticSearchServiceAccessPolicy: this.getElasticSearchServiceAccessPolicy(),
                 DynamoDbAccessPolicy: this.getDynamoDbAccessPolicy(),
-                CloudWatchLogsAccessPolicy: this.getCloudWatchLogsAccessPolicy()
+                CloudWatchLogsAccessPolicy: this.getCloudWatchLogsAccessPolicy(),
+                SESAccessPermissions: this.getSesAccessPolicy(),
             }
         });
     }
@@ -84,6 +86,7 @@ export class IdentityStack extends Stack {
                 new PolicyStatement({
                     actions: [
                         'sqs:SendMessage',
+                        'sqs:ReceiveMessage',
                         'sqs:DeleteMessage',
                         'sqs:GetQueueAttributes',
                         'sqs:GetQueueUrl'
@@ -101,6 +104,8 @@ export class IdentityStack extends Stack {
                 new PolicyStatement({
                     actions: [
                         'es:ESHttpGet',
+                        'es:ESHttpPost',
+                        'es:ESHttpPut'
                     ],
                     effect: Effect.ALLOW,
                     resources: ['*']
@@ -115,9 +120,24 @@ export class IdentityStack extends Stack {
                 new PolicyStatement({
                     actions: [
                         'dynamodb:GetItem',
-                        'dynamodb:Query'
+                        'dynamodb:Query',
+                        'dynamodb:PutItem'
                     ],
                     effect: Effect.ALLOW,
+                    resources: ['*']
+                })
+            ]
+        });
+    }
+
+    private getSesAccessPolicy(): PolicyDocument {
+        return new PolicyDocument({
+            statements: [
+                new PolicyStatement({
+                    actions: [
+                        'ses:SendEmail',
+                        'ses:SendRawEmail'
+                    ],
                     resources: ['*']
                 })
             ]
