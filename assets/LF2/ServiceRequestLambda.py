@@ -42,12 +42,11 @@ def handler(event, context):
     )
 
     service_request = service_request_dict['Messages'][0]
-    retry_count = 3
-    retry_flag = False
 
     try:
-#         cuisine = service_request['MessageAttributes'].get('Cuisine').get('StringValue').lower()
-        cuisine = 'Cuban'
+        cuisine = service_request['MessageAttributes'].get('Cuisine').get('StringValue').lower()
+        locality = service_request['MessageAttributes'].get('Locality').get('StringValue').lower()
+
         possible_restaurants = elasticsearch_client.search(
             index='data',
             body={
@@ -60,6 +59,7 @@ def handler(event, context):
         )
 
         restaurant_id = random.choice(possible_restaurants['hits']['hits'])['_source'].get('id')
+
         restaurant_information = dynamodb_client.get_item(
             TableName='Restaurants',
             Key={
@@ -71,10 +71,21 @@ def handler(event, context):
                 }
             }
         )
-        # Get attributes: restaurant_information['Items']['Name']
+
+        restaurant_name = restaurant_information['Item']['name']
+
+        restaurant_address_dict = restaurant_information['Item']['location']
+        restaurant_street = restaurant_address_dict.get('address1').get('S')
+        restaurant_street += ', ' + restaurant_address_dict.get('city').get('S')
+        restaurant_street += ', ' + restaurant_address_dict.get('zip_code').get('S')
+
+        restaurant_link = restaurant_information['Item']['url']
+
         send_email(
             service_request['MessageAttributes'].get('EmailAddress').get('StringValue'),
-            'Restaurant recommendation'
+            f'Based on your request for {cuisine} in {locality}, we would like to recommend' + \
+            f'{restaurant_name} located at {restaurant_street}. You can find more information by visiting this' + \
+            f'link: {restaurant_link}. Enjoy!'
         )
 
     except ClientError as e:
