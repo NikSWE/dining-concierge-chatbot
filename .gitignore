@@ -10,4 +10,5 @@ cdk.out
 .idea/
 
 assets/LF0/node_modules
-assets/LF1/node_modules
+assets/LF2/venv
+assets/LF2/.idea/

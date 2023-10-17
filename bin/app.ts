@@ -17,7 +17,7 @@ class DiningConciergeChatbotStack extends Stack {
 
     private createStacks() {
         const identity = new IdentityStack(this, 'DiningConciergeIdentityStack', {
-            env: env
+            env: env,
         });
 
         const sqs = new SqsStack(this, 'DiningConciergeSqsStack', {
@@ -29,7 +29,6 @@ class DiningConciergeChatbotStack extends Stack {
             callLexLambdaRole: identity.callLexLambdaRole,
             lexCodeHookLambdaRole: identity.lexCodeHookLamdaRole,
             serviceRequestLambdaRole: identity.serviceRequestLambdaRole,
-            sqsQueue: sqs.queue
         });
         lambda.addDependency(identity);
         lambda.addDependency(sqs);
@@ -42,12 +41,12 @@ class DiningConciergeChatbotStack extends Stack {
         apiGateway.addDependency(lambda);
 
         const s3 = new S3Stack(this, 'DiningConciergeS3Stack', {
-            env: env
+            env: env,
         });
         s3.addDependency(apiGateway);
 
         const dynamodb = new DynamoDBStack(this, 'DiningConciergeDynamoDBStack', {
-            env: env
+            env: env,
         });
 
         const elasticsearch = new OpenSearchServiceStack(this, 'DiningConciergeOpenSearchServiceStack', {

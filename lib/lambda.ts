@@ -1,16 +1,15 @@
-import {Stack, StackProps} from "aws-cdk-lib";
+import {RemovalPolicy, Stack, StackProps} from "aws-cdk-lib";
 import {Construct} from "constructs";
-import {Code, Function, Runtime} from "aws-cdk-lib/aws-lambda";
+import {Code, Function, IFunction, Runtime} from "aws-cdk-lib/aws-lambda";
 import {Role} from "aws-cdk-lib/aws-iam"
-import {RetentionDays} from "aws-cdk-lib/aws-logs";
+import {FilterPattern, LogGroup, RetentionDays, SubscriptionFilter} from "aws-cdk-lib/aws-logs";
 import {Queue} from "aws-cdk-lib/aws-sqs";
-import {SqsEventSource} from "aws-cdk-lib/aws-lambda-event-sources";
+import {LambdaDestination} from "aws-cdk-lib/aws-logs-destinations";
 
 export interface LambdaStackProps extends StackProps {
     readonly callLexLambdaRole: Role;
     readonly lexCodeHookLambdaRole: Role;
     readonly serviceRequestLambdaRole: Role;
-    readonly sqsQueue: Queue;
 }
 
 export class LambdaStack extends Stack {
@@ -34,19 +33,25 @@ export class LambdaStack extends Stack {
             functionName: 'LexCodeHook',
             runtime: Runtime.NODEJS_LATEST,
             handler: 'LexCodeHookLambda.handler',
-            code: Code.fromAsset('assets/LF1'),
+            code: Code.fromAsset('assets/LF1/'),
             logRetention: RetentionDays.INFINITE,
             role: props.lexCodeHookLambdaRole
         });
 
+
         this.serviceRequestLambda = new Function(this, 'ServiceRequestLambda', {
             functionName: 'ServiceRequestLambda',
-            runtime: Runtime.NODEJS_LATEST,
+            runtime: Runtime.PYTHON_3_10,
             handler: 'ServiceRequestLambda.handler',
-            code: Code.fromAsset('assets/LF2'),
+            code: Code.fromAsset('assets/LF2/ServiceRequestLambda.zip'),
             logRetention: RetentionDays.INFINITE,
-            role: props.serviceRequestLambdaRole
+            role: props.serviceRequestLambdaRole,
         });
-        this.serviceRequestLambda.addEventSource(new SqsEventSource(props.sqsQueue));
+
+        const serviceRequestLambdaTriger = new SubscriptionFilter(this, 'LexCodeHookSubsription', {
+            logGroup: this.lexCodeHookLambda.logGroup,
+            destination: new LambdaDestination(this.serviceRequestLambda as IFunction),
+            filterPattern: FilterPattern.allTerms('INFO')
+        });
     }
 }
