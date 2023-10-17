@@ -53,6 +53,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handler = void 0;
 var aws_sdk_1 = require("aws-sdk");
+var sqsClient = new aws_sdk_1.SQS();
+var dynamoDBClient = new aws_sdk_1.DynamoDB();
 var localitiesServiced = new Set([
     'manhattan',
     'brooklyn',
@@ -92,6 +94,7 @@ function getElicitSlotResponse(slotToEllicitName, messageContent, currentSlots) 
                 PhoneNumber: currentSlots.PhoneNumber ? currentSlots.PhoneNumber : null,
                 EmailAddress: currentSlots.EmailAddress ? currentSlots.EmailAddress : null,
                 Locality: currentSlots.Locality ? currentSlots.Locality : null,
+                Autofill: currentSlots.Autofill ? currentSlots.Autofill : null,
                 BookingDate: currentSlots.BookingDate ? currentSlots.BookingDate : null,
                 BookingTime: currentSlots.BookingTime ? currentSlots.BookingTime : null,
                 NumberOfPeople: currentSlots.NumberOfPeople ? currentSlots.NumberOfPeople : null
@@ -122,13 +125,15 @@ function isValidBookingDate(bookingDate) {
     var currentDate = new Date(getStartOfDay(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })));
     return currentDate <= reservationDate;
 }
+function isValidAutofillChoice(autofillChoice) {
+    return autofillChoice.toLowerCase() == 'yes' || autofillChoice.toLowerCase() == 'no';
+}
 function enqueueSqs(event) {
     return __awaiter(this, void 0, void 0, function () {
-        var sqsClient, params, response, error_1;
+        var params, response, error_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    sqsClient = new aws_sdk_1.SQS();
                     params = {
                         MessageBody: 'Suggestion Request',
                         QueueUrl: 'https://sqs.us-east-1.amazonaws.com/132900788542/SuggestionRequestQueue',
@@ -176,6 +181,42 @@ function enqueueSqs(event) {
         });
     });
 }
+function storeUserInformation(event) {
+    return __awaiter(this, void 0, void 0, function () {
+        var response, error_2;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _a.trys.push([0, 2, , 3]);
+                    return [4 /*yield*/, dynamoDBClient.putItem({
+                            Item: {
+                                'PhoneNumber': {
+                                    S: event.currentIntent.slots.PhoneNumber
+                                },
+                                'Cuisine': {
+                                    S: event.currentIntent.slots.Cuisine
+                                },
+                                'EmailAddress': {
+                                    S: event.currentIntent.slots.EmailAddress
+                                },
+                                'Locality': {
+                                    S: event.currentIntent.slots.Locality
+                                }
+                            },
+                            TableName: 'UserInformation'
+                        }).promise()];
+                case 1:
+                    response = _a.sent();
+                    return [3 /*break*/, 3];
+                case 2:
+                    error_2 = _a.sent();
+                    console.error('Error: ', error_2);
+                    return [3 /*break*/, 3];
+                case 3: return [2 /*return*/];
+            }
+        });
+    });
+}
 var CustomHandler = /** @class */ (function () {
     function CustomHandler() {
         this.nextHandler = null;
@@ -189,26 +230,73 @@ var CustomHandler = /** @class */ (function () {
             var result;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0:
-                        result = this.handleRequest(event);
-                        if (!result) {
-                            if (this.nextHandler) {
-                                return [2 /*return*/, this.nextHandler.passRequest(event)];
-                            }
-                        }
-                        else {
-                            return [2 /*return*/, result];
-                        }
-                        return [4 /*yield*/, enqueueSqs(event)];
+                    case 0: return [4 /*yield*/, this.handleRequest(event)];
                     case 1:
+                        result = _a.sent();
+                        if (!!result) return [3 /*break*/, 4];
+                        if (!this.nextHandler) return [3 /*break*/, 3];
+                        return [4 /*yield*/, this.nextHandler.passRequest(event)];
+                    case 2: return [2 /*return*/, _a.sent()];
+                    case 3: return [3 /*break*/, 5];
+                    case 4: return [2 /*return*/, result];
+                    case 5: return [4 /*yield*/, storeUserInformation(event)];
+                    case 6:
                         _a.sent();
-                        return [2 /*return*/, getCloseResponse('We have received your request! We will get in touch shortly!')];
+                        return [4 /*yield*/, enqueueSqs(event)];
+                    case 7:
+                        _a.sent();
+                        return [2 /*return*/, Promise.resolve(getCloseResponse('We have received your request! We will get in touch shortly!'))];
                 }
             });
         });
     };
     return CustomHandler;
 }());
+var AutofillInformationHandler = /** @class */ (function (_super) {
+    __extends(AutofillInformationHandler, _super);
+    function AutofillInformationHandler() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    AutofillInformationHandler.prototype.handleRequest = function (event) {
+        return __awaiter(this, void 0, void 0, function () {
+            var response, userInformation;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        response = null;
+                        return [4 /*yield*/, dynamoDBClient.getItem({
+                                TableName: 'UserInformation',
+                                Key: {
+                                    'PhoneNumber': {
+                                        S: event.currentIntent.slots.PhoneNumber
+                                    }
+                                }
+                            }).promise()];
+                    case 1:
+                        userInformation = _a.sent();
+                        console.log(userInformation.Item);
+                        if (userInformation.Item) {
+                            if (!event.currentIntent.slots.Autofill) {
+                                response = getElicitSlotResponse('Autofill', 'Welcome back, would you like to autofill your basic information?', event.currentIntent.slots);
+                            }
+                            else if (event.currentIntent.slots.Autofill &&
+                                !isValidAutofillChoice(event.currentIntent.slots.Autofill)) {
+                                response = getElicitSlotResponse('Autofill', 'Sorry, please respond yes or no. Would you like to autofill your basic information?', event.currentIntent.slots);
+                            }
+                            else if (event.currentIntent.slots.Autofill.toLowerCase() == 'yes') {
+                                event.currentIntent.slots.EmailAddress = userInformation.Item.EmailAddress.S;
+                                event.currentIntent.slots.Locality = userInformation.Item.Locality.S;
+                                event.currentIntent.slots.Cuisine = userInformation.Item.Cuisine.S;
+                                // return this.nextHandler!.passRequest(event);
+                            }
+                        }
+                        return [2 /*return*/, Promise.resolve(response)];
+                }
+            });
+        });
+    };
+    return AutofillInformationHandler;
+}(CustomHandler));
 var EllicitLocalityHandler = /** @class */ (function (_super) {
     __extends(EllicitLocalityHandler, _super);
     function EllicitLocalityHandler() {
@@ -223,7 +311,7 @@ var EllicitLocalityHandler = /** @class */ (function (_super) {
             !localitiesServiced.has(event.currentIntent.slots.Locality.toLowerCase())) {
             response = getElicitSlotResponse('Locality', 'Sorry, we only service the five boroughs of New York City. Please provide a valid burough.', event.currentIntent.slots);
         }
-        return response;
+        return Promise.resolve(response);
     };
     return EllicitLocalityHandler;
 }(CustomHandler));
@@ -241,7 +329,7 @@ var EllicitPhoneNumberHandler = /** @class */ (function (_super) {
             event.currentIntent.slots.PhoneNumber.length != 10) {
             response = getElicitSlotResponse('PhoneNumber', 'I am sorry, could you please provide me a valid 10-digit phone number?', event.currentIntent.slots);
         }
-        return response;
+        return Promise.resolve(response);
     };
     return EllicitPhoneNumberHandler;
 }(CustomHandler));
@@ -259,7 +347,7 @@ var EllicitEmailAddressHandler = /** @class */ (function (_super) {
             !isValidEmailAddress(event.currentIntent.slots.EmailAddress)) {
             response = getElicitSlotResponse('EmailAddress', 'I am sorry, could you please provide a different email address?', event.currentIntent.slots);
         }
-        return response;
+        return Promise.resolve(response);
     };
     return EllicitEmailAddressHandler;
 }(CustomHandler));
@@ -277,7 +365,7 @@ var EllicitCuisineHandler = /** @class */ (function (_super) {
             !cuisinesAvailable.has(event.currentIntent.slots.Cuisine.toLowerCase())) {
             response = getElicitSlotResponse('Cuisine', 'I am sorry, we only have Indian, Mexican, and Italian options. What cuisine would you like to try?', event.currentIntent.slots);
         }
-        return response;
+        return Promise.resolve(response);
     };
     return EllicitCuisineHandler;
 }(CustomHandler));
@@ -295,7 +383,7 @@ var EllicitBookingTimeHandler = /** @class */ (function (_super) {
             !isValidBookingTime(event.currentIntent.slots.BookingDate, event.currentIntent.slots.BookingTime)) {
             response = getElicitSlotResponse('BookingTime', 'I am sorry, we can only make reservations in the future. Could you please provide a valid booking time?', event.currentIntent.slots);
         }
-        return response;
+        return Promise.resolve(response);
     };
     return EllicitBookingTimeHandler;
 }(CustomHandler));
@@ -313,7 +401,7 @@ var EllicitBookingDateHandler = /** @class */ (function (_super) {
             !isValidBookingDate(event.currentIntent.slots.BookingDate)) {
             response = getElicitSlotResponse('BookingDate', 'Sorry, we can only make reservations for the future. Please provide a valid date.', event.currentIntent.slots);
         }
-        return response;
+        return Promise.resolve(response);
     };
     return EllicitBookingDateHandler;
 }(CustomHandler));
@@ -332,7 +420,7 @@ var EllicitNumberOfPeopleHandler = /** @class */ (function (_super) {
                 +event.currentIntent.slots.NumberOfPeople > 100)) {
             response = getElicitSlotResponse('NumberOfPeople', 'I am sorry, could you please provide a valid size for the dining party?', event.currentIntent.slots);
         }
-        return response;
+        return Promise.resolve(response);
     };
     return EllicitNumberOfPeopleHandler;
 }(CustomHandler));
@@ -342,7 +430,7 @@ var GreetingIntentHandler = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     GreetingIntentHandler.prototype.handleRequest = function (event) {
-        return getCloseResponse('Hi, how can I help?');
+        return Promise.resolve(getCloseResponse('Hi, how can I help?'));
     };
     return GreetingIntentHandler;
 }(CustomHandler));
@@ -352,7 +440,7 @@ var ThankYouIntentHandler = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     ThankYouIntentHandler.prototype.handleRequest = function (event) {
-        return getCloseResponse('Happy to help!');
+        return Promise.resolve(getCloseResponse('Happy to help!'));
     };
     return ThankYouIntentHandler;
 }(CustomHandler));
@@ -362,7 +450,7 @@ var DiningSuggestionsIntentHandler = /** @class */ (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     DiningSuggestionsIntentHandler.prototype.handleRequest = function (event) {
-        return null;
+        return Promise.resolve(null);
     };
     return DiningSuggestionsIntentHandler;
 }(CustomHandler));
@@ -376,8 +464,10 @@ var ellicitCuisineHandler = new EllicitCuisineHandler();
 var ellicitBookingTimeHandler = new EllicitBookingTimeHandler();
 var ellicitBookingDateHandler = new EllicitBookingDateHandler();
 var ellicitNumberOfPeopleHandler = new EllicitNumberOfPeopleHandler();
+var autofillInformationHandler = new AutofillInformationHandler();
 diningSuggestionIntentHandler.setNext(ellicitPhoneNumberHandler);
-ellicitPhoneNumberHandler.setNext(ellicitEmailAddressHandler);
+ellicitPhoneNumberHandler.setNext(autofillInformationHandler);
+autofillInformationHandler.setNext(ellicitEmailAddressHandler);
 ellicitEmailAddressHandler.setNext(ellicitLocalityHandler);
 ellicitLocalityHandler.setNext(ellicitCuisineHandler);
 ellicitCuisineHandler.setNext(ellicitBookingDateHandler);

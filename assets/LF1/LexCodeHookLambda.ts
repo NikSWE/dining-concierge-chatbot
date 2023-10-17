@@ -1,6 +1,9 @@
 import {Handler, LexEvent, LexEventSlots, LexResult} from "aws-lambda";
-import {SQS} from "aws-sdk";
+import {DynamoDB, SQS} from "aws-sdk";
 import {SendMessageRequest} from "aws-sdk/clients/sqs";
+
+const sqsClient = new SQS();
+const dynamoDBClient = new DynamoDB();
 
 const localitiesServiced: Set<string> = new Set<string>([
     'manhattan',
@@ -48,6 +51,7 @@ function getElicitSlotResponse(
                 PhoneNumber: currentSlots.PhoneNumber ? currentSlots.PhoneNumber : null,
                 EmailAddress: currentSlots.EmailAddress ? currentSlots.EmailAddress : null,
                 Locality: currentSlots.Locality ? currentSlots.Locality : null,
+                Autofill: currentSlots.Autofill ? currentSlots.Autofill : null,
                 BookingDate: currentSlots.BookingDate ? currentSlots.BookingDate : null,
                 BookingTime: currentSlots.BookingTime ? currentSlots.BookingTime : null,
                 NumberOfPeople: currentSlots.NumberOfPeople ? currentSlots.NumberOfPeople : null
@@ -85,8 +89,11 @@ function isValidBookingDate(bookingDate: string): boolean {
     return currentDate <= reservationDate;
 }
 
+function isValidAutofillChoice(autofillChoice: string) {
+    return autofillChoice.toLowerCase() == 'yes' || autofillChoice.toLowerCase() == 'no';
+}
+
 async function enqueueSqs(event: LexEvent) {
-    const sqsClient = new SQS();
     const params: SendMessageRequest = {
         MessageBody: 'Suggestion Request',
         QueueUrl: 'https://sqs.us-east-1.amazonaws.com/132900788542/SuggestionRequestQueue',
@@ -126,6 +133,30 @@ async function enqueueSqs(event: LexEvent) {
     }
 }
 
+async function storeUserInformation(event: LexEvent) {
+    try {
+        const response = await dynamoDBClient.putItem({
+            Item: {
+                'PhoneNumber': {
+                    S: event.currentIntent.slots.PhoneNumber!
+                },
+                'Cuisine': {
+                    S: event.currentIntent.slots.Cuisine!
+                },
+                'EmailAddress': {
+                    S: event.currentIntent.slots.EmailAddress!
+                },
+                'Locality': {
+                    S: event.currentIntent.slots.Locality!
+                }
+            },
+            TableName: 'UserInformation'
+        }).promise();
+    } catch (error) {
+        console.error('Error: ', error);
+    }
+}
+
 abstract class CustomHandler {
     private nextHandler: CustomHandler | null = null;
 
@@ -134,26 +165,68 @@ abstract class CustomHandler {
         return handler;
     }
 
-    abstract handleRequest(event: LexEvent): LexResult | null;
+    abstract handleRequest(event: LexEvent): Promise<LexResult | null>;
 
     async passRequest(event: LexEvent): Promise<LexResult> {
-        const result = this.handleRequest(event);
+        const result = await this.handleRequest(event);
 
         if (!result) {
             if (this.nextHandler) {
-                return this.nextHandler.passRequest(event);
+                return await this.nextHandler.passRequest(event);
             }
         } else {
             return result;
         }
 
+        await storeUserInformation(event);
         await enqueueSqs(event);
-        return getCloseResponse('We have received your request! We will get in touch shortly!');
+
+        return Promise.resolve(getCloseResponse('We have received your request! We will get in touch shortly!'));
+    }
+}
+
+class AutofillInformationHandler extends CustomHandler {
+    async handleRequest(event: LexEvent): Promise<LexResult | null> {
+        let response: LexResult | null = null;
+
+        const userInformation = await dynamoDBClient.getItem({
+            TableName: 'UserInformation',
+            Key: {
+                'PhoneNumber': {
+                    S: event.currentIntent.slots.PhoneNumber!
+                }
+            }
+        }).promise();
+
+        console.log(userInformation.Item);
+
+        if (userInformation.Item) {
+            if (!event.currentIntent.slots.Autofill) {
+                response = getElicitSlotResponse(
+                    'Autofill',
+                    'Welcome back, would you like to autofill your basic information?',
+                    event.currentIntent.slots
+                );
+            } else if (event.currentIntent.slots.Autofill &&
+                !isValidAutofillChoice(event.currentIntent.slots.Autofill)) {
+                response = getElicitSlotResponse(
+                    'Autofill',
+                    'Sorry, please respond yes or no. Would you like to autofill your basic information?',
+                    event.currentIntent.slots
+                )
+            } else if (event.currentIntent.slots.Autofill.toLowerCase() == 'yes') {
+                event.currentIntent.slots.EmailAddress = userInformation.Item.EmailAddress.S;
+                event.currentIntent.slots.Locality = userInformation.Item.Locality.S;
+                event.currentIntent.slots.Cuisine = userInformation.Item.Cuisine.S;
+            }
+        }
+
+        return Promise.resolve(response);
     }
 }
 
 class EllicitLocalityHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
         let response: LexResult | null = null;
 
         if (!event.currentIntent.slots.Locality) {
@@ -171,12 +244,12 @@ class EllicitLocalityHandler extends CustomHandler {
             );
         }
 
-        return response;
+        return Promise.resolve(response);
     }
 }
 
 class EllicitPhoneNumberHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
         let response: LexResult | null = null;
 
         if (!event.currentIntent.slots.PhoneNumber) {
@@ -194,12 +267,12 @@ class EllicitPhoneNumberHandler extends CustomHandler {
             );
         }
 
-        return response;
+        return Promise.resolve(response);
     }
 }
 
 class EllicitEmailAddressHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
         let response: LexResult | null = null;
 
         if (!event.currentIntent.slots.EmailAddress) {
@@ -217,12 +290,12 @@ class EllicitEmailAddressHandler extends CustomHandler {
             );
         }
 
-        return response;
+        return Promise.resolve(response);
     }
 }
 
 class EllicitCuisineHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
         let response: LexResult | null = null;
 
         if (!event.currentIntent.slots.Cuisine) {
@@ -240,12 +313,12 @@ class EllicitCuisineHandler extends CustomHandler {
             );
         }
 
-        return response;
+        return Promise.resolve(response);
     }
 }
 
 class EllicitBookingTimeHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
         let response: LexResult | null = null;
 
         if (!event.currentIntent.slots.BookingTime) {
@@ -263,12 +336,12 @@ class EllicitBookingTimeHandler extends CustomHandler {
             );
         }
 
-        return response;
+        return Promise.resolve(response);
     }
 }
 
 class EllicitBookingDateHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
         let response: LexResult | null = null;
 
         if (!event.currentIntent.slots.BookingDate) {
@@ -286,12 +359,12 @@ class EllicitBookingDateHandler extends CustomHandler {
             );
         }
 
-        return response;
+        return Promise.resolve(response);
     }
 }
 
 class EllicitNumberOfPeopleHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
         let response: LexResult | null = null;
 
         if (!event.currentIntent.slots.NumberOfPeople) {
@@ -310,25 +383,25 @@ class EllicitNumberOfPeopleHandler extends CustomHandler {
             );
         }
 
-        return response;
+        return Promise.resolve(response);
     }
 }
 
 class GreetingIntentHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
-        return getCloseResponse('Hi, how can I help?');
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
+        return Promise.resolve(getCloseResponse('Hi, how can I help?'));
     }
 }
 
 class ThankYouIntentHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult | null {
-        return getCloseResponse('Happy to help!');
+    handleRequest(event: LexEvent): Promise<LexResult | null> {
+        return Promise.resolve(getCloseResponse('Happy to help!'));
     }
 }
 
 class DiningSuggestionsIntentHandler extends CustomHandler {
-    handleRequest(event: LexEvent): LexResult |  null {
-        return null;
+    handleRequest(event: LexEvent): Promise<LexResult |  null> {
+        return Promise.resolve(null);
     }
 }
 
@@ -343,9 +416,11 @@ const ellicitCuisineHandler = new EllicitCuisineHandler();
 const ellicitBookingTimeHandler = new EllicitBookingTimeHandler();
 const ellicitBookingDateHandler = new EllicitBookingDateHandler();
 const ellicitNumberOfPeopleHandler = new EllicitNumberOfPeopleHandler();
+const autofillInformationHandler = new AutofillInformationHandler();
 
 diningSuggestionIntentHandler.setNext(ellicitPhoneNumberHandler);
-ellicitPhoneNumberHandler.setNext(ellicitEmailAddressHandler);
+ellicitPhoneNumberHandler.setNext(autofillInformationHandler);
+autofillInformationHandler.setNext(ellicitEmailAddressHandler);
 ellicitEmailAddressHandler.setNext(ellicitLocalityHandler);
 ellicitLocalityHandler.setNext(ellicitCuisineHandler);
 ellicitCuisineHandler.setNext(ellicitBookingDateHandler);
