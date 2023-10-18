@@ -14,8 +14,8 @@ queue_url = 'https://sqs.us-east-1.amazonaws.com/132900788542/SuggestionRequestQ
 elasticsearch_endpoint = 'search-restaurants-manual-ubb7tnfrs5osv6tew7ucbgsuxi.us-east-1.es.amazonaws.com'
 
 request_authorization = AWSRequestsAuth(
-    aws_access_key='AKIAR54MBDE7AZ7OGYE3',
-    aws_secret_access_key='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',
+    aws_access_key='x',
+    aws_secret_access_key='x',
     aws_region='us-east-1',
     aws_service='es',
     aws_host=elasticsearch_endpoint
@@ -115,7 +115,7 @@ def send_email(email_address, email_body):
                     'Data': 'Restaurant Suggestion'
                 }
             },
-            Source='ishantaldekar1@gmail.com'
+            Source='x@gmail.com'
         )
         print('Email send')
     except ClientError as e:

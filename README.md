@@ -1,8 +1,6 @@
-# Welcome to your CDK TypeScript project
+# Dining Concierge Chatbot
 
-This is a blank project for CDK development with TypeScript.
-
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+![](./images/demo.png)
 
 ## Useful commands
 
