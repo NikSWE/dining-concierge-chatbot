@@ -2,6 +2,8 @@
 
 ![](./images/demo.png)
 
+![](./images/architecture.png)
+
 ## Useful commands
 
 * `npm run build`   compile typescript to js
